@@ -1,0 +1,151 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Vehicles - SmartPark{% endblock %}
+{% block page_title %}Vehicles Management{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Search and Filters -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <form method="get" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <input type="text" name="q" value="{{ q }}" placeholder="Search by plate or owner..." class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                
+                <select name="type" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">All Types</option>
+                    <option value="car" {% if selected_type == 'car' %}selected{% endif %}>Car</option>
+                    <option value="truck" {% if selected_type == 'truck' %}selected{% endif %}>Truck</option>
+                    <option value="motorcycle" {% if selected_type == 'motorcycle' %}selected{% endif %}>Motorcycle</option>
+                    <option value="van" {% if selected_type == 'van' %}selected{% endif %}>Van</option>
+                </select>
+                
+                <select name="status" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">All Status</option>
+                    <option value="registered" {% if selected_status == 'registered' %}selected{% endif %}>Registered</option>
+                    <option value="banned" {% if selected_status == 'banned' %}selected{% endif %}>Banned</option>
+                    <option value="unregistered" {% if selected_status == 'unregistered' %}selected{% endif %}>Unregistered</option>
+                </select>
+                
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg">
+                    <i class="fas fa-search"></i> Search
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Action Button -->
+    <div class="flex justify-end">
+        <a href="{% url 'vehicles:add' %}" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg">
+            <i class="fas fa-plus"></i> Add Vehicle
+        </a>
+    </div>
+
+    <!-- Vehicles Table -->
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+        <table class="w-full">
+            <thead class="bg-gray-100 border-b">
+                <tr>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Plate</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Owner</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Type</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Brand</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Color</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for vehicle in page_obj %}
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="px-6 py-4 font-mono font-semibold text-gray-900">{{ vehicle.plate_number }}</td>
+                    <td class="px-6 py-4 text-gray-700">{{ vehicle.owner_name }}</td>
+                    <td class="px-6 py-4 text-gray-700">{{ vehicle.get_vehicle_type_display }}</td>
+                    <td class="px-6 py-4 text-gray-700">{{ vehicle.vehicle_brand }}</td>
+                    <td class="px-6 py-4 text-gray-700">{{ vehicle.vehicle_color }}</td>
+                    <td class="px-6 py-4">
+                        {% if vehicle.is_banned %}
+                            <span class="px-2 py-1 rounded text-xs font-semibold bg-red-100 text-red-800">Banned</span>
+                        {% elif not vehicle.is_registered %}
+                            <span class="px-2 py-1 rounded text-xs font-semibold bg-yellow-100 text-yellow-800">Unregistered</span>
+                        {% else %}
+                            <span class="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">Registered</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-sm space-x-2">
+                        <a href="{% url 'vehicles:detail' vehicle.pk %}" class="text-blue-600 hover:text-blue-700">View</a>
+                        <a href="{% url 'vehicles:edit' vehicle.pk %}" class="text-blue-600 hover:text-blue-700">Edit</a>
+                        <button onclick="toggleBan({{ vehicle.pk }}, {{ vehicle.is_banned|lower }})" class="text-red-600 hover:text-red-700">
+                            {% if vehicle.is_banned %}Unban{% else %}Ban{% endif %}
+                        </button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                        No vehicles found
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="flex justify-center gap-2">
+        {% if page_obj.has_previous %}
+        <a href="?page=1{% if q %}&q={{ q }}{% endif %}" class="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">First</a>
+        <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}" class="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Previous</a>
+        {% endif %}
+        
+        <span class="px-4 py-2">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}" class="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Next</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}{% if q %}&q={{ q }}{% endif %}" class="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Last</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function toggleBan(vehicleId, isBanned) {
+    const action = isBanned ? 'Unban' : 'Ban';
+    const reason = !isBanned ? prompt(`Enter ban reason for this vehicle:`) : '';
+    
+    if (isBanned || reason !== null) {
+        const formData = new FormData();
+        formData.append('ban_reason', reason || '');
+        
+        fetch(`{% url 'vehicles:list' %}${vehicleId}/toggle-ban/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken'),
+            },
+            body: formData,
+        })
+        .then(r => r.json())
+        .then(data => {
+            alert(data.message);
+            location.reload();
+        })
+        .catch(e => alert('Error: ' + e));
+    }
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>
+{% endblock %}

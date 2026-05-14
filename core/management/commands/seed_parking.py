@@ -1,0 +1,108 @@
+from django.core.management.base import BaseCommand
+from django.utils import timezone
+from datetime import timedelta, time
+import random
+from vehicles.models import Vehicle
+from access.models import ParkingConfig, AccessLog
+
+
+class Command(BaseCommand):
+    help = 'Seed the database with initial parking data'
+
+    def handle(self, *args, **options):
+        self.stdout.write('Starting database seeding...')
+        
+        config, created = ParkingConfig.objects.get_or_create(
+            defaults={
+                'open_time': time(7, 0),
+                'close_time': time(22, 0),
+                'max_capacity': 50,
+                'current_count': 12,
+            }
+        )
+        if created:
+            self.stdout.write(self.style.SUCCESS('Created ParkingConfig'))
+        
+        plates = [
+            ('16TAC123', 'Ahmed Bennani', 'Toyota', 'White'),
+            ('16TZA456', 'Fatima Zouaoui', 'Honda', 'Black'),
+            ('16ALD789', 'Karim Mebarki', 'BMW', 'Silver'),
+            ('16BAB012', 'Leila Saadi', 'Ford', 'Red'),
+            ('16BOV345', 'Mohamed Amrani', 'Mercedes', 'Blue'),
+            ('16WST678', 'Aïsha Rahmani', 'Volkswagen', 'Gray'),
+            ('16OUA901', 'Hassan Djelloul', 'Peugeot', 'Green'),
+            ('16CHL234', 'Nora Messi', 'Renault', 'Yellow'),
+            ('16GNU567', 'Riad Yahiaoui', 'Fiat', 'Orange'),
+            ('16TRZ890', 'Yasmine Bouazza', 'Hyundai', 'Brown'),
+        ]
+        
+        for i, (plate, owner, brand, color) in enumerate(plates):
+            vehicle, created = Vehicle.objects.get_or_create(
+                plate_number=plate,
+                defaults={
+                    'owner_name': owner,
+                    'owner_phone': '+213' + str(random.randint(600000000, 799999999)),
+                    'owner_email': f'{owner.lower().replace(" ", ".")}@example.com',
+                    'vehicle_type': random.choice(['car', 'truck', 'van']),
+                    'vehicle_brand': brand,
+                    'vehicle_color': color,
+                    'is_registered': True,
+                    'is_banned': False,
+                }
+            )
+            if created:
+                self.stdout.write(f'  Created vehicle: {plate}')
+        
+        banned_plates = [
+            ('16DZA111', 'Banned Owner 1', 'Kia', 'Black'),
+            ('16DZA222', 'Banned Owner 2', 'Skoda', 'Silver'),
+        ]
+        
+        for plate, owner, brand, color in banned_plates:
+            vehicle, created = Vehicle.objects.get_or_create(
+                plate_number=plate,
+                defaults={
+                    'owner_name': owner,
+                    'owner_phone': '+213' + str(random.randint(600000000, 799999999)),
+                    'owner_email': f'{owner.lower().replace(" ", ".")}@example.com',
+                    'vehicle_type': 'car',
+                    'vehicle_brand': brand,
+                    'vehicle_color': color,
+                    'is_registered': True,
+                    'is_banned': True,
+                    'ban_reason': 'Unpaid parking fees',
+                }
+            )
+            if created:
+                self.stdout.write(f'  Created banned vehicle: {plate}')
+        
+        now = timezone.now()
+        for i in range(20):
+            days_ago = random.randint(0, 6)
+            hours_ago = random.randint(0, 23)
+            event_time = now - timedelta(days=days_ago, hours=hours_ago)
+            
+            event_type = random.choice(['ENTRY', 'EXIT', 'DENIED'])
+            reason = ''
+            if event_type == 'DENIED':
+                reason = random.choice([
+                    'NOT_REGISTERED',
+                    'BANNED',
+                    'OUTSIDE_HOURS',
+                    'PARKING_FULL',
+                ])
+            
+            vehicle = random.choice(Vehicle.objects.all())
+            
+            log = AccessLog.objects.create(
+                vehicle=vehicle,
+                plate_detected=vehicle.plate_number,
+                event_type=event_type,
+                denial_reason=reason,
+                confidence_score=random.uniform(0.75, 0.99),
+                timestamp=event_time,
+                gate='MAIN',
+                processed_by='AUTO',
+            )
+        
+        self.stdout.write(self.style.SUCCESS('Database seeding completed successfully!'))

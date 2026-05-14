@@ -1,0 +1,16 @@
+.env
+db.sqlite3
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+build/
+.vscode/
+.DS_Store
+media/snapshots/
+media/vehicles/
+venv/
+env/
+.idea/
+*.log
+staticfiles/

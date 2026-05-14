@@ -1,0 +1,132 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Access Logs - SmartPark{% endblock %}
+{% block page_title %}Access Logs{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Filters -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <form method="get" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <input type="date" name="date_from" value="{{ date_from }}" placeholder="From date" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                
+                <input type="date" name="date_to" value="{{ date_to }}" placeholder="To date" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                
+                <select name="event_type" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">All Events</option>
+                    <option value="ENTRY" {% if selected_event_type == 'ENTRY' %}selected{% endif %}>Entry</option>
+                    <option value="EXIT" {% if selected_event_type == 'EXIT' %}selected{% endif %}>Exit</option>
+                    <option value="DENIED" {% if selected_event_type == 'DENIED' %}selected{% endif %}>Denied</option>
+                </select>
+                
+                <input type="text" name="plate" value="{{ plate_search }}" placeholder="Search plate..." class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg">
+                    <i class="fas fa-search"></i> Filter
+                </button>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <select name="reason" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">All Denial Reasons</option>
+                    <option value="NOT_REGISTERED" {% if selected_reason == 'NOT_REGISTERED' %}selected{% endif %}>Not Registered</option>
+                    <option value="BANNED" {% if selected_reason == 'BANNED' %}selected{% endif %}>Banned</option>
+                    <option value="OUTSIDE_HOURS" {% if selected_reason == 'OUTSIDE_HOURS' %}selected{% endif %}>Outside Hours</option>
+                    <option value="PARKING_FULL" {% if selected_reason == 'PARKING_FULL' %}selected{% endif %}>Parking Full</option>
+                    <option value="LOW_CONFIDENCE" {% if selected_reason == 'LOW_CONFIDENCE' %}selected{% endif %}>Low Confidence</option>
+                </select>
+                
+                <div class="flex gap-2">
+                    <a href="?{% if date_from %}date_from={{ date_from }}&{% endif %}{% if date_to %}date_to={{ date_to }}&{% endif %}{% if selected_event_type %}event_type={{ selected_event_type }}&{% endif %}{% if plate_search %}plate={{ plate_search }}&{% endif %}" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg flex-1 text-center">
+                        <i class="fas fa-download"></i> Export CSV
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-white rounded-lg shadow p-4 text-center">
+            <p class="text-gray-600 text-sm">Total Records</p>
+            <p class="text-3xl font-bold text-gray-900">{{ total_count }}</p>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4 text-center">
+            <p class="text-gray-600 text-sm">Entries</p>
+            <p class="text-3xl font-bold text-green-600">{{ entries_count }}</p>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4 text-center">
+            <p class="text-gray-600 text-sm">Exits</p>
+            <p class="text-3xl font-bold text-blue-600">{{ exits_count }}</p>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4 text-center">
+            <p class="text-gray-600 text-sm">Denied</p>
+            <p class="text-3xl font-bold text-red-600">{{ denials_count }}</p>
+        </div>
+    </div>
+
+    <!-- Logs Table -->
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+        <table class="w-full">
+            <thead class="bg-gray-100 border-b">
+                <tr>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Timestamp</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Plate</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Event</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Reason</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Confidence</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Owner</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Gate</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in page_obj %}
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="px-6 py-4 text-sm text-gray-900">{{ log.timestamp|date:"Y-m-d H:i:s" }}</td>
+                    <td class="px-6 py-4 font-mono font-semibold text-gray-900">{{ log.plate_detected }}</td>
+                    <td class="px-6 py-4">
+                        <span class="px-2 py-1 rounded text-xs font-semibold {% if log.event_type == 'ENTRY' %}bg-green-100 text-green-800{% elif log.event_type == 'EXIT' %}bg-blue-100 text-blue-800{% else %}bg-red-100 text-red-800{% endif %}">
+                            {{ log.get_event_type_display }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600">{{ log.get_denial_reason_display|default:"-" }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-900">{{ log.confidence_score|floatformat:2 }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-600">
+                        {% if log.vehicle %}
+                        <a href="{% url 'vehicles:detail' log.vehicle.pk %}" class="text-blue-600 hover:underline">{{ log.vehicle.owner_name }}</a>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600">{{ log.gate }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                        No access logs found
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="flex justify-center gap-2">
+        {% if page_obj.has_previous %}
+        <a href="?page=1" class="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">First</a>
+        <a href="?page={{ page_obj.previous_page_number }}" class="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Previous</a>
+        {% endif %}
+        
+        <span class="px-4 py-2">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}" class="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Next</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}" class="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Last</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

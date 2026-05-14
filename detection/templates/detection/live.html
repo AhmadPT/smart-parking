@@ -1,0 +1,289 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Live Detection - SmartPark{% endblock %}
+{% block page_title %}Live License Plate Detection{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Video Feed and Controls -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Camera Feed -->
+        <div class="lg:col-span-2 bg-black rounded-lg shadow overflow-hidden">
+            <canvas id="camera-canvas" class="w-full bg-black" style="max-height: 600px;"></canvas>
+        </div>
+
+        <!-- Control Panel -->
+        <div class="space-y-4">
+            <!-- Camera Controls -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Camera Controls</h3>
+                <div id="camera-controls" class="space-y-3">
+                    <button onclick="startCamera()" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg">
+                        <i class="fas fa-play"></i> Start Camera
+                    </button>
+                    <button onclick="stopCamera()" class="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg">
+                        <i class="fas fa-stop"></i> Stop Camera
+                    </button>
+                    <button onclick="manualCapture()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg">
+                        <i class="fas fa-camera"></i> Capture Frame
+                    </button>
+                </div>
+                
+                <div id="freeze-controls" style="display: none;" class="space-y-3">
+                    <div id="freeze-status" class="text-center py-2"></div>
+                    <button onclick="unfreezeCamera()" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg">
+                        <i class="fas fa-sync"></i> Back to Live
+                    </button>
+                </div>
+            </div>
+
+            <!-- Settings -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Settings</h3>
+                <div class="space-y-3">
+                    <label class="block">
+                        <span class="text-sm font-medium text-gray-700 mb-2 block">Confidence Threshold</span>
+                        <input type="range" id="confidence-slider" min="0.5" max="0.95" step="0.05" value="0.70" class="w-full">
+                        <span id="confidence-value" class="text-sm text-gray-600 block mt-1">0.70</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Detection Result -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Last Detection</h3>
+                <div class="space-y-3">
+                    <div class="bg-gray-50 rounded p-3">
+                        <p class="text-xs text-gray-600">Plate Number</p>
+                        <p id="detected-plate" class="text-2xl font-mono font-bold text-gray-900">-</p>
+                    </div>
+                    
+                    <div class="bg-gray-50 rounded p-3">
+                        <p class="text-xs text-gray-600">Decision</p>
+                        <p id="detected-decision" class="text-lg font-semibold">
+                            <span class="px-2 py-1 rounded text-xs bg-gray-200 text-gray-800">-</span>
+                        </p>
+                    </div>
+                    
+                    <div class="bg-gray-50 rounded p-3">
+                        <p class="text-xs text-gray-600">Confidence</p>
+                        <div class="w-full bg-gray-200 rounded-full h-2 mt-1">
+                            <div id="confidence-bar" class="bg-blue-600 h-2 rounded-full" style="width: 0%"></div>
+                        </div>
+                        <p id="confidence-text" class="text-sm text-gray-700 mt-1">0%</p>
+                    </div>
+                    
+                    <div class="bg-gray-50 rounded p-3">
+                        <p class="text-xs text-gray-600">Reason</p>
+                        <p id="detected-reason" class="text-sm text-gray-700">-</p>
+                    </div>
+                    
+                    <div class="bg-gray-50 rounded p-3">
+                        <p class="text-xs text-gray-600">Owner</p>
+                        <p id="detected-owner" class="text-sm text-gray-700">-</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Snapshot Gallery -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Snapshots</h3>
+        <div id="snapshot-gallery" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            <p class="col-span-full text-center text-gray-500">No snapshots yet</p>
+        </div>
+    </div>
+</div>
+
+<script>
+let ws;
+let wsReconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+let isConnected = false;
+let isFrozen = false;
+let frozenFrame = null;
+
+function initWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(protocol + '//' + window.location.host + '/ws/detection/');
+    
+    ws.onopen = function(e) {
+        console.log('✓ WebSocket connection established');
+        isConnected = true;
+        wsReconnectAttempts = 0;
+    };
+    
+    ws.onmessage = function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            console.log('✓ WS message:', data.type, 'frame_size=' + (data.frame ? data.frame.length : 0) + ' bytes');
+            
+            if (data.type === 'frame_stream' || data.type === 'frame_update') {
+                // Don't update canvas if frozen
+                if (!isFrozen && data.frame) {
+                    console.log('  → Drawing frame on canvas');
+                    const canvas = document.getElementById('camera-canvas');
+                    const ctx = canvas.getContext('2d');
+                    const img = new Image();
+                    
+                    img.onerror = function() {
+                        console.error('  ✗ Image load failed');
+                    };
+                    
+                    img.onload = function() {
+                        console.log('  ✓ Image loaded:', img.width + 'x' + img.height);
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        ctx.drawImage(img, 0, 0);
+                    };
+                    
+                    img.src = 'data:image/jpeg;base64,' + data.frame;
+                } else if (isFrozen) {
+                    console.log('  → Canvas frozen, skipping update');
+                } else {
+                    console.log('  ✗ No frame data');
+                }
+                
+                // Only update result if not frozen
+                if (!isFrozen) {
+                    updateDetectionResult({
+                        plate: data.plate,
+                        decision: data.decision,
+                        reason: data.reason,
+                        confidence: data.confidence,
+                        vehicle_name: data.vehicle_name || '-',
+                        timestamp: data.timestamp,
+                    });
+                }
+            }
+            
+            if (data.type === 'manual_result') {
+                console.log('✓ Manual result received:', data);
+                isFrozen = true;
+                updateDetectionResult(data);
+                showProcessingComplete();
+            }
+        } catch (e) {
+            console.error('✗ Error parsing WS message:', e);
+        }
+    };
+    
+    ws.onerror = function(error) {
+        console.error('WebSocket error:', error);
+        isConnected = false;
+    };
+    
+    ws.onclose = function(e) {
+        console.log('WebSocket connection closed');
+        isConnected = false;
+        
+        if (wsReconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            wsReconnectAttempts++;
+            const delay = Math.pow(2, wsReconnectAttempts) * 1000;
+            console.log(`Reconnecting in ${delay}ms... (attempt ${wsReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+            setTimeout(initWebSocket, delay);
+        }
+    };
+}
+
+function updateDetectionResult(data) {
+    document.getElementById('detected-plate').textContent = data.plate || '-';
+    document.getElementById('detected-reason').textContent = data.reason || '-';
+    document.getElementById('detected-owner').textContent = data.vehicle_name || '-';
+    
+    const confidence = data.confidence || 0;
+    document.getElementById('confidence-bar').style.width = (confidence * 100) + '%';
+    document.getElementById('confidence-text').textContent = (confidence * 100).toFixed(1) + '%';
+    
+    const decision = data.decision || '-';
+    let badgeClass = 'bg-gray-200 text-gray-800';
+    let icon = '-';
+    
+    if (decision === 'GRANTED') {
+        badgeClass = 'bg-green-100 text-green-800';
+        icon = '<i class="fas fa-check-circle"></i>';
+    } else if (decision === 'DENIED') {
+        badgeClass = 'bg-red-100 text-red-800';
+        icon = '<i class="fas fa-times-circle"></i>';
+    } else if (decision === 'UNKNOWN') {
+        badgeClass = 'bg-yellow-100 text-yellow-800';
+        icon = '<i class="fas fa-question-circle"></i>';
+    }
+    
+    document.getElementById('detected-decision').innerHTML = `<span class="px-2 py-1 rounded text-xs font-semibold ${badgeClass}">${icon} ${decision}</span>`;
+}
+
+function showProcessingComplete() {
+    // Show unfreeze button
+    document.getElementById('freeze-controls').style.display = 'block';
+    document.getElementById('camera-controls').style.display = 'none';
+}
+
+function freezeCamera() {
+    const canvas = document.getElementById('camera-canvas');
+    frozenFrame = canvas.toDataURL('image/jpeg');
+    // Show loading state
+    document.getElementById('freeze-status').innerHTML = '<p class="text-center text-blue-600 font-semibold">🔄 Processing with AI...</p>';
+}
+
+function unfreezeCamera() {
+    isFrozen = false;
+    frozenFrame = null;
+    document.getElementById('freeze-controls').style.display = 'none';
+    document.getElementById('camera-controls').style.display = 'block';
+    document.getElementById('freeze-status').innerHTML = '';
+}
+
+function startCamera() {
+    if (!isConnected) {
+        alert('WebSocket not connected');
+        return;
+    }
+    ws.send(JSON.stringify({action: 'start'}));
+}
+
+function stopCamera() {
+    if (!isConnected) return;
+    ws.send(JSON.stringify({action: 'stop'}));
+}
+
+function manualCapture() {
+    const canvas = document.getElementById('camera-canvas');
+    const imageData = canvas.toDataURL('image/jpeg');
+    const base64 = imageData.split(',')[1];
+    
+    if (!isConnected) {
+        alert('WebSocket not connected');
+        return;
+    }
+    
+    if (!base64) {
+        alert('No frame to capture. Start camera first.');
+        return;
+    }
+    
+    freezeCamera();
+    
+    ws.send(JSON.stringify({
+        action: 'manual_trigger',
+        frame: base64
+    }));
+}
+
+document.getElementById('confidence-slider').addEventListener('input', function(e) {
+    const value = parseFloat(e.target.value);
+    document.getElementById('confidence-value').textContent = value.toFixed(2);
+});
+
+// Initialize WebSocket on page load
+initWebSocket();
+
+// Auto-start camera on page load
+setTimeout(() => {
+    if (isConnected) {
+        startCamera();
+    }
+}, 1000);
+</script>
+{% endblock %}

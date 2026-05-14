@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    command: daphne -b 0.0.0.0 -p 8000 smart_parking.asgi:application
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - db_data:/app/db
+      - media_data:/app/media
+      - staticfiles_data:/app/staticfiles
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=docker-dev-key-change-in-production
+      - DATABASE_URL=sqlite:///db/db.sqlite3
+      - ALLOWED_HOSTS=localhost,127.0.0.1,web
+      - FALLBACK_MODE=False
+    depends_on:
+      - setup
+    stdin_open: true
+    tty: true
+
+  setup:
+    build: .
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             python manage.py seed_parking"
+    volumes:
+      - .:/app
+      - db_data:/app/db
+      - media_data:/app/media
+      - staticfiles_data:/app/staticfiles
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=docker-dev-key-change-in-production
+      - DATABASE_URL=sqlite:///db/db.sqlite3
+      - ALLOWED_HOSTS=localhost,127.0.0.1,web
+      - FALLBACK_MODE=False
+
+volumes:
+  db_data:
+  media_data:
+  staticfiles_data:

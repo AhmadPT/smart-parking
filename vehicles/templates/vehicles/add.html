@@ -1,0 +1,95 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Add Vehicle - SmartPark{% endblock %}
+{% block page_title %}Add New Vehicle{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white rounded-lg shadow p-8">
+        <form method="post" enctype="multipart/form-data" class="space-y-6">
+            {% csrf_token %}
+            
+            <!-- Vehicle Information -->
+            <div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Vehicle Information</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Plate Number *</label>
+                        {{ form.plate_number }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Vehicle Type *</label>
+                        {{ form.vehicle_type }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Brand</label>
+                        {{ form.vehicle_brand }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Color</label>
+                        {{ form.vehicle_color }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Photo</label>
+                        {{ form.photo }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Owner Information -->
+            <div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Owner Information</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Owner Name *</label>
+                        {{ form.owner_name }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                        {{ form.owner_phone }}
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                        {{ form.owner_email }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Status -->
+            <div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Status</h3>
+                <div class="space-y-4">
+                    <label class="flex items-center">
+                        {{ form.is_registered }}
+                        <span class="ml-2 text-gray-700">Registered</span>
+                    </label>
+                    <label class="flex items-center">
+                        {{ form.is_banned }}
+                        <span class="ml-2 text-gray-700">Banned</span>
+                    </label>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Ban Reason</label>
+                        {{ form.ban_reason }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Notes -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                {{ form.notes }}
+            </div>
+            
+            <!-- Buttons -->
+            <div class="flex gap-4">
+                <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg">
+                    <i class="fas fa-save"></i> Add Vehicle
+                </button>
+                <a href="{% url 'vehicles:list' %}" class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-6 rounded-lg">
+                    <i class="fas fa-times"></i> Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
