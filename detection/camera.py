@@ -11,19 +11,24 @@ from django.utils import timezone
 from django.conf import settings
 from access.logic import process_detection, clean_plate
 from access.models import AccessLog, ParkingConfig
-import google.generativeai as genai
 
 
 class LicensePlateDetector:
     def __init__(self):
         # Initialize Gemini API with google.generativeai library
+        self.model = None
         api_key = os.environ.get('GEMINI_API_KEY')
         if api_key:
-            genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-flash-lite-latest')
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=api_key)
+                self.model = genai.GenerativeModel('gemini-flash-lite-latest')
+            except ImportError:
+                print("Warning: google.generativeai not installed. Install with: pip install google-generativeai")
+            except Exception as e:
+                print(f"Warning: Gemini initialization failed: {e}")
         else:
             print("Warning: GEMINI_API_KEY not set. License plate detection will not work.")
-            self.model = None
         
         self.cap = None
         self.running = False
@@ -201,7 +206,7 @@ Examples:
             try:
                 frame = None
                 
-                if settings.FALLBACK_MODE and self.fallback_frames:
+                if self.fallback_frames and (settings.FALLBACK_MODE or self.cap is None):
                     frame_path = self.fallback_frames[self.fallback_index]
                     frame = cv2.imread(frame_path)
                     if frame is None:
@@ -229,6 +234,8 @@ Examples:
         if self.running:
             return
         
+        self.cap = None
+        
         if not settings.FALLBACK_MODE:
             from access.models import Gate
             gate_qs = Gate.objects.filter(is_active=True)
@@ -244,11 +251,15 @@ Examples:
                 print(f"Gate '{self.current_gate}' has no camera IP, falling back to webcam")
                 self.cap = cv2.VideoCapture(0)
             
-            if not self.cap.isOpened():
-                print("Warning: Camera not available, switching to fallback mode")
-                if not self.fallback_frames:
-                    print("Error: No fallback frames available")
-                    return
+            if self.cap is None or not self.cap.isOpened():
+                print("Warning: Camera not available")
+                self.cap = None
+        
+        if self.cap is None and self.fallback_frames:
+            print("Using fallback test frames")
+        elif self.cap is None:
+            print("Error: No camera and no fallback frames available")
+            return
         
         self.running = True
         self.thread = threading.Thread(target=self.capture_loop, daemon=True)
