@@ -229,12 +229,37 @@ Examples:
                 print(f"Capture loop error: {e}")
                 break
     
+    def _rtsp_reachable(self, ip, port, timeout=3):
+        """Check if RTSP host is reachable via TCP before trying VideoCapture."""
+        import socket
+        try:
+            s = socket.create_connection((ip, port), timeout=timeout)
+            s.close()
+            return True
+        except (socket.timeout, ConnectionRefusedError, OSError):
+            return False
+
+    def _probe_camera(self, source):
+        """Try opening a camera source with timeout. Returns (cap, success)."""
+        cap = cv2.VideoCapture(source)
+        if not cap.isOpened():
+            return cap, False
+        # Try reading a frame quickly
+        for _ in range(5):
+            ret, frame = cap.read()
+            if ret and frame is not None:
+                return cap, True
+            time.sleep(0.1)
+        cap.release()
+        return None, False
+
     def start_stream(self):
         """Start the video stream."""
         if self.running:
             return
         
         self.cap = None
+        source_desc = 'fallback frames'
         
         if not settings.FALLBACK_MODE:
             from access.models import Gate
@@ -244,22 +269,38 @@ Examples:
             gate = gate_qs.first()
             
             if gate and gate.camera_ip:
-                rtsp = gate.rtsp_url()
-                print(f"Connecting to RTSP: {rtsp}")
-                self.cap = cv2.VideoCapture(rtsp)
-            else:
-                print(f"Gate '{self.current_gate}' has no camera IP, falling back to webcam")
-                self.cap = cv2.VideoCapture(0)
+                ip = gate.camera_ip
+                port = gate.camera_port or 554
+                print(f"Checking RTSP reachability: {ip}:{port}")
+                reachable = self._rtsp_reachable(ip, port)
+                if reachable:
+                    rtsp = gate.rtsp_url()
+                    print(f"  Host reachable, connecting to {rtsp}")
+                    cap, ok = self._probe_camera(rtsp)
+                    if ok:
+                        self.cap = cap
+                        source_desc = f'RTSP {ip}'
+                    else:
+                        print(f"  RTSP connected but no frames")
+                else:
+                    print(f"  RTSP host {ip}:{port} not reachable")
             
-            if self.cap is None or not self.cap.isOpened():
-                print("Warning: Camera not available")
-                self.cap = None
+            if self.cap is None:
+                print(f"Gate '{self.current_gate}' no camera available, trying webcam")
+                cap, ok = self._probe_camera(0)
+                if ok:
+                    self.cap = cap
+                    source_desc = 'webcam'
         
-        if self.cap is None and self.fallback_frames:
-            print("Using fallback test frames")
-        elif self.cap is None:
-            print("Error: No camera and no fallback frames available")
-            return
+        if self.cap is None:
+            if self.fallback_frames:
+                source_desc = 'fallback frames'
+                print(f"Using {source_desc}")
+            else:
+                print("Error: No camera and no fallback frames available")
+                return
+        else:
+            print(f"Using {source_desc}")
         
         self.running = True
         self.thread = threading.Thread(target=self.capture_loop, daemon=True)
