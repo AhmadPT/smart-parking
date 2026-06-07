@@ -312,12 +312,18 @@ Examples:
         if self.cap:
             self.cap.release()
     
-    def encode_frame(self, frame):
-        """Encode frame to base64 JPEG string."""
+    def encode_frame(self, frame, max_width=640):
+        """Resize frame and encode to base64 JPEG string."""
         if frame is None:
             return ''
         
-        ret, buffer = cv2.imencode('.jpg', frame)
+        h, w = frame.shape[:2]
+        if w > max_width:
+            scale = max_width / w
+            new_size = (max_width, int(h * scale))
+            frame = cv2.resize(frame, new_size, interpolation=cv2.INTER_AREA)
+        
+        ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
         if ret:
             frame_b64 = base64.b64encode(buffer).decode('utf-8')
             return frame_b64
