@@ -8,8 +8,11 @@ import base64
 
 @login_required
 def live_view(request):
+    from access.models import Gate
+    gates = Gate.objects.filter(is_active=True).select_related('zone')
     context = {
         'ws_url': 'ws://localhost:8000/ws/detection/',
+        'gates': gates,
     }
     return render(request, 'detection/live.html', context)
 

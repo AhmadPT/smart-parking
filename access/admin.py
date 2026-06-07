@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import AccessLog, ParkingConfig
+from .models import AccessLog, ParkingConfig, Zone, Gate
 
 
 @admin.register(AccessLog)
@@ -100,3 +100,22 @@ class ParkingConfigAdmin(admin.ModelAdmin):
             )
         }),
     )
+
+
+@admin.register(Zone)
+class ZoneAdmin(admin.ModelAdmin):
+    list_display = ('name', 'location', 'is_active', 'current_count', 'max_capacity', 'occupancy_pct')
+    list_filter = ('is_active',)
+    search_fields = ('name', 'location')
+
+
+class GateInline(admin.TabularInline):
+    model = Gate
+    extra = 0
+
+
+@admin.register(Gate)
+class GateAdmin(admin.ModelAdmin):
+    list_display = ('name', 'zone', 'direction', 'camera_ip', 'is_active')
+    list_filter = ('zone', 'direction', 'is_active')
+    search_fields = ('name', 'camera_ip')

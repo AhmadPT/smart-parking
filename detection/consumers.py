@@ -25,9 +25,11 @@ class ParkingConsumer(AsyncWebsocketConsumer):
         try:
             data = json.loads(text_data)
             action = data.get('action')
+            gate_name = data.get('gate', 'MAIN')
             
             if action == 'start':
                 detector = get_detector()
+                detector.current_gate = gate_name
                 await sync_to_async(detector.start_stream)()
             
             elif action == 'stop':
@@ -43,6 +45,7 @@ class ParkingConsumer(AsyncWebsocketConsumer):
                     
                     if frame is not None:
                         detector = get_detector()
+                        detector.current_gate = gate_name
                         # Use AI explicitly on manual trigger
                         result = await sync_to_async(detector.process_frame)(frame, use_ai=True)
                         
@@ -53,6 +56,7 @@ class ParkingConsumer(AsyncWebsocketConsumer):
                             'reason': result['reason'],
                             'confidence': result['confidence'],
                             'vehicle_name': result['vehicle_name'],
+                            'gate': gate_name,
                         }))
         
         except Exception as e:
@@ -88,7 +92,8 @@ class ParkingConsumer(AsyncWebsocketConsumer):
                             print(f"[DEBUG] Frame #{frame_count}: encoded {len(frame_b64)} bytes")
                         
                         result = detector.last_result
-                        config = await sync_to_async(self._get_config)()
+                        gate_name = getattr(detector, 'current_gate', 'MAIN')
+                        config = await sync_to_async(self._get_config)(gate_name)
                         
                         msg = {
                             'type': 'frame_stream',
@@ -101,6 +106,7 @@ class ParkingConsumer(AsyncWebsocketConsumer):
                             'count': config['count'],
                             'capacity': config['capacity'],
                             'status': config['status'],
+                            'gate': getattr(detector, 'current_gate', 'MAIN'),
                         }
                         
                         json_str = json.dumps(msg)
@@ -122,25 +128,38 @@ class ParkingConsumer(AsyncWebsocketConsumer):
                 traceback.print_exc()
                 await asyncio.sleep(1)  # Wait before retrying
     
-    def _get_config(self):
+    def _get_config(self, gate_name='MAIN'):
         """Get parking config (sync function wrapped for async)."""
-        from access.models import ParkingConfig
-        config, _ = ParkingConfig.objects.get_or_create(defaults={'max_capacity': 50})
+        from access.models import ParkingConfig, Gate, Zone
         
-        if config.is_manual_closed:
-            status = "CLOSED"
-        elif config.is_manual_open:
-            status = "OPEN"
-        elif config.is_within_hours():
-            status = "OPEN"
+        # Try zone-level capacity if a gate with zone is found
+        gate_qs = Gate.objects.filter(name__iexact=gate_name, is_active=True)
+        gate = gate_qs.select_related('zone').first()
+        
+        if gate and gate.zone:
+            zone = gate.zone
+            count = zone.current_count
+            capacity = zone.max_capacity
+            status = "OPEN" if not zone.is_full() else "FULL"
         else:
-            status = "CLOSED"
-        
-        if config.is_full():
-            status = "FULL"
+            config, _ = ParkingConfig.objects.get_or_create(defaults={'max_capacity': 50})
+            count = config.current_count
+            capacity = config.max_capacity
+            
+            if config.is_manual_closed:
+                status = "CLOSED"
+            elif config.is_manual_open:
+                status = "OPEN"
+            elif config.is_within_hours():
+                status = "OPEN"
+            else:
+                status = "CLOSED"
+            
+            if config.is_full():
+                status = "FULL"
         
         return {
-            'count': config.current_count,
-            'capacity': config.max_capacity,
+            'count': count,
+            'capacity': capacity,
             'status': status,
         }

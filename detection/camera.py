@@ -32,6 +32,7 @@ class LicensePlateDetector:
         self.thread = None
         self.fallback_frames = []
         self.fallback_index = 0
+        self.current_gate = 'MAIN'
         self._load_fallback_frames()
     
     def _load_fallback_frames(self):
@@ -165,7 +166,7 @@ Examples:
             
             # Only process if plate was detected and it's not NO_PLATE_FOUND
             if plate_text and plate_text != 'NO_PLATE_FOUND':
-                detection_result = process_detection(plate_text, confidence, numpy_frame=frame)
+                detection_result = process_detection(plate_text, confidence, numpy_frame=frame, gate_name=self.current_gate)
                 result['decision'] = detection_result['decision']
                 result['reason'] = detection_result['reason']
                 if detection_result['vehicle']:
@@ -229,7 +230,20 @@ Examples:
             return
         
         if not settings.FALLBACK_MODE:
-            self.cap = cv2.VideoCapture(0)
+            from access.models import Gate
+            gate_qs = Gate.objects.filter(is_active=True)
+            if self.current_gate != 'MAIN':
+                gate_qs = gate_qs.filter(name__iexact=self.current_gate)
+            gate = gate_qs.first()
+            
+            if gate and gate.camera_ip:
+                rtsp = gate.rtsp_url()
+                print(f"Connecting to RTSP: {rtsp}")
+                self.cap = cv2.VideoCapture(rtsp)
+            else:
+                print(f"Gate '{self.current_gate}' has no camera IP, falling back to webcam")
+                self.cap = cv2.VideoCapture(0)
+            
             if not self.cap.isOpened():
                 print("Warning: Camera not available, switching to fallback mode")
                 if not self.fallback_frames:

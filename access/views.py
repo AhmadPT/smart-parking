@@ -8,8 +8,8 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 import csv
 from functools import wraps
-from .models import AccessLog, ParkingConfig
-from .forms import ParkingConfigForm
+from .models import AccessLog, ParkingConfig, Zone, Gate
+from .forms import ParkingConfigForm, ZoneForm, GateForm
 from .logic import process_exit
 
 # Custom decorator for staff members since Django 6.0+ removed staff_member_required
@@ -236,3 +236,91 @@ def reset_count(request):
         'count': config.current_count,
         'message': 'Parking count reset to 0',
     })
+
+
+@login_required
+@staff_member_required
+def zone_list(request):
+    zones = Zone.objects.all()
+    return render(request, 'access/zones.html', {'zones': zones})
+
+
+@login_required
+@staff_member_required
+def zone_add(request):
+    if request.method == 'POST':
+        form = ZoneForm(request.POST)
+        if form.is_valid():
+            form.save()
+            return redirect('access:zones')
+    else:
+        form = ZoneForm()
+    return render(request, 'access/zone_form.html', {'form': form, 'title': 'Add Zone'})
+
+
+@login_required
+@staff_member_required
+def zone_edit(request, pk):
+    zone = get_object_or_404(Zone, pk=pk)
+    if request.method == 'POST':
+        form = ZoneForm(request.POST, instance=zone)
+        if form.is_valid():
+            form.save()
+            return redirect('access:zones')
+    else:
+        form = ZoneForm(instance=zone)
+    return render(request, 'access/zone_form.html', {'form': form, 'title': 'Edit Zone', 'zone': zone})
+
+
+@login_required
+@staff_member_required
+@require_http_methods(['POST'])
+def zone_delete(request, pk):
+    zone = get_object_or_404(Zone, pk=pk)
+    if zone.gates.exists():
+        return JsonResponse({'error': 'Cannot delete zone with active gates'}, status=400)
+    zone.delete()
+    return redirect('access:zones')
+
+
+@login_required
+@staff_member_required
+def gate_list(request):
+    gates = Gate.objects.select_related('zone').all()
+    return render(request, 'access/gates.html', {'gates': gates})
+
+
+@login_required
+@staff_member_required
+def gate_add(request):
+    if request.method == 'POST':
+        form = GateForm(request.POST)
+        if form.is_valid():
+            form.save()
+            return redirect('access:gates')
+    else:
+        form = GateForm()
+    return render(request, 'access/gate_form.html', {'form': form, 'title': 'Add Gate'})
+
+
+@login_required
+@staff_member_required
+def gate_edit(request, pk):
+    gate = get_object_or_404(Gate, pk=pk)
+    if request.method == 'POST':
+        form = GateForm(request.POST, instance=gate)
+        if form.is_valid():
+            form.save()
+            return redirect('access:gates')
+    else:
+        form = GateForm(instance=gate)
+    return render(request, 'access/gate_form.html', {'form': form, 'title': 'Edit Gate', 'gate': gate})
+
+
+@login_required
+@staff_member_required
+@require_http_methods(['POST'])
+def gate_delete(request, pk):
+    gate = get_object_or_404(Gate, pk=pk)
+    gate.delete()
+    return redirect('access:gates')

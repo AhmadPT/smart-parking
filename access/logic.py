@@ -1,5 +1,6 @@
 import re
 from datetime import datetime
+from django.db import models
 from .models import AccessLog, ParkingConfig
 from vehicles.models import Vehicle
 from django.core.files.base import ContentFile
@@ -32,7 +33,7 @@ def save_snapshot(numpy_frame, filename):
         return None
 
 
-def process_detection(plate_string, confidence, snapshot_path=None, numpy_frame=None):
+def process_detection(plate_string, confidence, snapshot_path=None, numpy_frame=None, gate_name='MAIN'):
     """
     Main access decision engine.
     
@@ -46,6 +47,8 @@ def process_detection(plate_string, confidence, snapshot_path=None, numpy_frame=
         'log': AccessLog instance
     }
     """
+    
+    from .models import Gate, Zone
     
     result = {
         'plate': plate_string,
@@ -64,6 +67,7 @@ def process_detection(plate_string, confidence, snapshot_path=None, numpy_frame=
             denial_reason='LOW_CONFIDENCE',
             confidence_score=confidence,
             processed_by='AUTO',
+            gate=gate_name,
         )
         result['log'] = log
         return result
@@ -71,7 +75,17 @@ def process_detection(plate_string, confidence, snapshot_path=None, numpy_frame=
     clean_plate_str = clean_plate(plate_string)
     result['plate'] = clean_plate_str
     
-    config, _ = ParkingConfig.objects.get_or_create(
+    # Resolve gate and its zone
+    try:
+        gate = Gate.objects.select_related('zone').get(
+            name__iexact=gate_name, is_active=True
+        )
+        use_gate = True
+    except Gate.DoesNotExist:
+        gate = None
+        use_gate = False
+    
+    global_config, _ = ParkingConfig.objects.get_or_create(
         defaults={
             'open_time': '07:00',
             'close_time': '22:00',
@@ -79,7 +93,7 @@ def process_detection(plate_string, confidence, snapshot_path=None, numpy_frame=
         }
     )
     
-    if config.is_manual_closed:
+    if global_config.is_manual_closed:
         result['reason'] = 'MANUAL_CLOSED'
         log = AccessLog.objects.create(
             plate_detected=clean_plate_str,
@@ -87,11 +101,13 @@ def process_detection(plate_string, confidence, snapshot_path=None, numpy_frame=
             denial_reason='MANUAL_CLOSED',
             confidence_score=confidence,
             processed_by='AUTO',
+            gate=gate_name,
         )
         result['log'] = log
         return result
     
-    if not config.is_manual_open and not config.is_within_hours():
+    # Check gate operating hours
+    if use_gate and not global_config.is_manual_open and not gate.is_within_hours():
         result['reason'] = 'OUTSIDE_HOURS'
         log = AccessLog.objects.create(
             plate_detected=clean_plate_str,
@@ -99,6 +115,7 @@ def process_detection(plate_string, confidence, snapshot_path=None, numpy_frame=
             denial_reason='OUTSIDE_HOURS',
             confidence_score=confidence,
             processed_by='AUTO',
+            gate=gate_name,
         )
         result['log'] = log
         return result
@@ -143,7 +160,40 @@ def process_detection(plate_string, confidence, snapshot_path=None, numpy_frame=
         result['log'] = log
         return result
     
-    if config.is_full():
+    if not vehicle.is_subscription_active():
+        result['reason'] = 'SUBSCRIPTION_EXPIRED'
+        log = AccessLog.objects.create(
+            vehicle=vehicle,
+            plate_detected=clean_plate_str,
+            event_type='DENIED',
+            denial_reason='SUBSCRIPTION_EXPIRED',
+            confidence_score=confidence,
+            processed_by='AUTO',
+        )
+        result['log'] = log
+        return result
+    
+    if not vehicle.can_enter_today():
+        result['reason'] = 'DAILY_LIMIT_REACHED'
+        log = AccessLog.objects.create(
+            vehicle=vehicle,
+            plate_detected=clean_plate_str,
+            event_type='DENIED',
+            denial_reason='DAILY_LIMIT_REACHED',
+            confidence_score=confidence,
+            processed_by='AUTO',
+            gate=gate_name,
+        )
+        result['log'] = log
+        return result
+    
+    # Zone capacity check
+    if use_gate and gate.zone:
+        capacity_check = gate.zone
+    else:
+        capacity_check = global_config
+    
+    if capacity_check.is_full():
         result['reason'] = 'PARKING_FULL'
         log = AccessLog.objects.create(
             vehicle=vehicle,
@@ -152,6 +202,22 @@ def process_detection(plate_string, confidence, snapshot_path=None, numpy_frame=
             denial_reason='PARKING_FULL',
             confidence_score=confidence,
             processed_by='AUTO',
+            gate=gate_name,
+        )
+        result['log'] = log
+        return result
+    
+    # Check vehicle type against gate restrictions
+    if use_gate and not gate.allows_vehicle_type(vehicle.vehicle_type):
+        result['reason'] = 'VEHICLE_TYPE_NOT_ALLOWED'
+        log = AccessLog.objects.create(
+            vehicle=vehicle,
+            plate_detected=clean_plate_str,
+            event_type='DENIED',
+            denial_reason='VEHICLE_TYPE_NOT_ALLOWED',
+            confidence_score=confidence,
+            processed_by='AUTO',
+            gate=gate_name,
         )
         result['log'] = log
         return result
@@ -161,8 +227,8 @@ def process_detection(plate_string, confidence, snapshot_path=None, numpy_frame=
     result['reason'] = 'Entry granted'
     result['vehicle'] = vehicle
     
-    config.current_count += 1
-    config.save()
+    capacity_check.current_count = models.F('current_count') + 1
+    capacity_check.save()
     
     snapshot_file = None
     if numpy_frame is not None:
@@ -178,18 +244,31 @@ def process_detection(plate_string, confidence, snapshot_path=None, numpy_frame=
         confidence_score=confidence,
         snapshot=snapshot_file,
         processed_by='AUTO',
+        gate=gate_name,
+        zone=gate.zone if use_gate and gate.zone else None,
     )
     result['log'] = log
     
     return result
 
 
-def process_exit(plate_string):
+def process_exit(plate_string, gate_name='MAIN'):
     """
     Process vehicle exit.
     Finds most recent ENTRY for this plate with no matching EXIT.
     """
+    from .models import Gate, Zone
+    
     clean_plate_str = clean_plate(plate_string)
+    
+    try:
+        gate = Gate.objects.select_related('zone').get(
+            name__iexact=gate_name, is_active=True
+        )
+        use_gate = True
+    except Gate.DoesNotExist:
+        gate = None
+        use_gate = False
     
     config, _ = ParkingConfig.objects.get_or_create(
         defaults={
@@ -223,10 +302,17 @@ def process_exit(plate_string):
                 event_type='EXIT',
                 confidence_score=0.95,
                 processed_by='AUTO',
+                gate=gate_name,
+                zone=gate.zone if use_gate and gate.zone else None,
             )
             
-            config.current_count = max(0, config.current_count - 1)
+            config.current_count = models.F('current_count') - 1
             config.save()
+            
+            if use_gate and gate.zone:
+                Zone.objects.filter(pk=gate.zone.pk).update(
+                    current_count=models.F('current_count') - 1
+                )
             
             return {
                 'plate': clean_plate_str,

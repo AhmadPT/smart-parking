@@ -1,0 +1,77 @@
+{% extends 'core/base.html' %}
+
+{% block title %}{{ title }} - SmartPark{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white rounded-lg shadow p-8">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            <div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Gate Details</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Zone *</label>
+                        {{ form.zone }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Name *</label>
+                        {{ form.name }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Direction *</label>
+                        {{ form.direction }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Camera IP</label>
+                        {{ form.camera_ip }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Camera Port</label>
+                        {{ form.camera_port }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Camera Username</label>
+                        {{ form.camera_username }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Camera Password</label>
+                        {{ form.camera_password }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Open Time *</label>
+                        {{ form.open_time }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Close Time *</label>
+                        {{ form.close_time }}
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Allowed Vehicle Types</label>
+                        {{ form.allowed_vehicle_types }}
+                        <p class="text-xs text-gray-500 mt-1">Comma-separated. Leave blank for all types.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <label class="flex items-center">
+                    {{ form.is_active }}
+                    <span class="ml-2 text-gray-700">Active</span>
+                </label>
+            </div>
+
+            <div class="flex gap-4">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg">
+                    <i class="fas fa-save"></i> Save
+                </button>
+                <a href="{% url 'access:gates' %}" class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-6 rounded-lg">
+                    <i class="fas fa-times"></i> Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

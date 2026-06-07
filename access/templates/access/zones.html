@@ -1,0 +1,66 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Zones - SmartPark{% endblock %}
+{% block page_title %}Zone Management{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-end">
+        <a href="{% url 'access:zone_add' %}" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg">
+            <i class="fas fa-plus"></i> Add Zone
+        </a>
+    </div>
+
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+        <table class="w-full">
+            <thead class="bg-gray-100 border-b">
+                <tr>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Name</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Location</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Occupancy</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Gates</th>
+                    <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for zone in zones %}
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="px-6 py-4 font-semibold text-gray-900">{{ zone.name }}</td>
+                    <td class="px-6 py-4 text-gray-700">{{ zone.location|default:'-' }}</td>
+                    <td class="px-6 py-4">
+                        {% if zone.is_active %}
+                            <span class="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">Active</span>
+                        {% else %}
+                            <span class="px-2 py-1 rounded text-xs font-semibold bg-red-100 text-red-800">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-700">
+                        <div class="flex items-center gap-2">
+                            <span>{{ zone.current_count }}/{{ zone.max_capacity }}</span>
+                            <div class="w-24 bg-gray-200 rounded-full h-2">
+                                <div class="{% if zone.occupancy_pct >= 90 %}bg-red-500{% elif zone.occupancy_pct >= 70 %}bg-yellow-500{% else %}bg-green-500{% endif %} h-2 rounded-full" style="width: {{ zone.occupancy_pct }}%"></div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-700">{{ zone.gates.count }}</td>
+                    <td class="px-6 py-4 text-sm space-x-2">
+                        <a href="{% url 'access:zone_edit' zone.pk %}" class="text-blue-600 hover:text-blue-700">Edit</a>
+                        <form method="post" action="{% url 'access:zone_delete' zone.pk %}" class="inline" onsubmit="return confirm('Delete this zone? Gates in this zone must be removed first.')">
+                            {% csrf_token %}
+                            <button type="submit" class="text-red-600 hover:text-red-700">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="px-6 py-8 text-center text-gray-500">
+                        No zones configured. <a href="{% url 'access:zone_add' %}" class="text-blue-600 hover:underline">Add one</a>.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

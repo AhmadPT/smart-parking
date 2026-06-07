@@ -1,5 +1,23 @@
 from django.contrib import admin
-from .models import Vehicle
+from .models import Vehicle, SubscriptionPlan
+
+
+@admin.register(SubscriptionPlan)
+class SubscriptionPlanAdmin(admin.ModelAdmin):
+    list_display = (
+        'display_name',
+        'price',
+        'max_entries_per_day',
+        'priority_level',
+        'has_unlimited_access',
+        'is_active',
+    )
+    list_editable = (
+        'max_entries_per_day',
+        'priority_level',
+        'has_unlimited_access',
+        'is_active',
+    )
 
 
 @admin.register(Vehicle)
@@ -8,6 +26,8 @@ class VehicleAdmin(admin.ModelAdmin):
         'plate_number',
         'owner_name',
         'vehicle_type',
+        'subscription_plan',
+        'is_subscription_active',
         'is_registered',
         'is_banned',
         'registered_at',
@@ -16,6 +36,7 @@ class VehicleAdmin(admin.ModelAdmin):
         'vehicle_type',
         'is_registered',
         'is_banned',
+        'subscription_plan',
         'registered_at',
     )
     search_fields = (
@@ -54,6 +75,12 @@ class VehicleAdmin(admin.ModelAdmin):
                 'is_registered',
                 'is_banned',
                 'ban_reason',
+            )
+        }),
+        ('Subscription', {
+            'fields': (
+                'subscription_plan',
+                'subscription_expires_at',
             )
         }),
         ('Metadata', {

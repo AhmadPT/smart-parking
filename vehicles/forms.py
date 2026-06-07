@@ -1,5 +1,5 @@
 from django import forms
-from .models import Vehicle
+from .models import Vehicle, SubscriptionPlan
 
 
 class VehicleForm(forms.ModelForm):
@@ -16,6 +16,8 @@ class VehicleForm(forms.ModelForm):
             'is_registered',
             'is_banned',
             'ban_reason',
+            'subscription_plan',
+            'subscription_expires_at',
             'photo',
             'notes',
         ]
@@ -58,6 +60,13 @@ class VehicleForm(forms.ModelForm):
                 'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500',
                 'placeholder': 'Reason for ban',
                 'rows': 3,
+            }),
+            'subscription_plan': forms.Select(attrs={
+                'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500',
+            }),
+            'subscription_expires_at': forms.DateTimeInput(attrs={
+                'type': 'datetime-local',
+                'class': 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500',
             }),
             'photo': forms.FileInput(attrs={
                 'class': 'w-full',

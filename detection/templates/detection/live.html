@@ -17,6 +17,16 @@
             <!-- Camera Controls -->
             <div class="bg-white rounded-lg shadow p-6">
                 <h3 class="text-lg font-semibold text-gray-900 mb-4">Camera Controls</h3>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Gate</label>
+                    <select id="gate-select" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        {% for gate in gates %}
+                        <option value="{{ gate.name }}">{{ gate.zone.name }} - {{ gate.name }} ({{ gate.get_direction_display }}){% if gate.camera_ip %} 📷{% endif %}</option>
+                        {% empty %}
+                        <option value="MAIN">No gate configured</option>
+                        {% endfor %}
+                    </select>
+                </div>
                 <div id="camera-controls" class="space-y-3">
                     <button onclick="startCamera()" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg">
                         <i class="fas fa-play"></i> Start Camera
@@ -81,6 +91,11 @@
                     <div class="bg-gray-50 rounded p-3">
                         <p class="text-xs text-gray-600">Owner</p>
                         <p id="detected-owner" class="text-sm text-gray-700">-</p>
+                    </div>
+                    
+                    <div class="bg-gray-50 rounded p-3">
+                        <p class="text-xs text-gray-600">Gate</p>
+                        <p id="detected-gate" class="text-sm font-semibold text-gray-700">-</p>
                     </div>
                 </div>
             </div>
@@ -154,6 +169,7 @@ function initWebSocket() {
                         confidence: data.confidence,
                         vehicle_name: data.vehicle_name || '-',
                         timestamp: data.timestamp,
+                        gate: data.gate || '-',
                     });
                 }
             }
@@ -162,6 +178,7 @@ function initWebSocket() {
                 console.log('✓ Manual result received:', data);
                 isFrozen = true;
                 updateDetectionResult(data);
+                document.getElementById('detected-gate').textContent = data.gate || '-';
                 showProcessingComplete();
             }
         } catch (e) {
@@ -191,6 +208,7 @@ function updateDetectionResult(data) {
     document.getElementById('detected-plate').textContent = data.plate || '-';
     document.getElementById('detected-reason').textContent = data.reason || '-';
     document.getElementById('detected-owner').textContent = data.vehicle_name || '-';
+    document.getElementById('detected-gate').textContent = data.gate || '-';
     
     const confidence = data.confidence || 0;
     document.getElementById('confidence-bar').style.width = (confidence * 100) + '%';
@@ -235,17 +253,21 @@ function unfreezeCamera() {
     document.getElementById('freeze-status').innerHTML = '';
 }
 
+function getSelectedGate() {
+    return document.getElementById('gate-select').value;
+}
+
 function startCamera() {
     if (!isConnected) {
         alert('WebSocket not connected');
         return;
     }
-    ws.send(JSON.stringify({action: 'start'}));
+    ws.send(JSON.stringify({action: 'start', gate: getSelectedGate()}));
 }
 
 function stopCamera() {
     if (!isConnected) return;
-    ws.send(JSON.stringify({action: 'stop'}));
+    ws.send(JSON.stringify({action: 'stop', gate: getSelectedGate()}));
 }
 
 function manualCapture() {
@@ -267,7 +289,8 @@ function manualCapture() {
     
     ws.send(JSON.stringify({
         action: 'manual_trigger',
-        frame: base64
+        frame: base64,
+        gate: getSelectedGate()
     }));
 }
 
